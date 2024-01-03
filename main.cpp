@@ -176,10 +176,41 @@ private:
 		}
     }
 
+    // Need to check if device is suitable for rendering
+    bool isDeviceSuitable(VkPhysicalDevice device) {
+		// TODO : check if device is suitable for rendering
+		return true;
+	}
+
+    void pickPhysicalDevice() {
+        VkPhysicalDevice physicalDevice = VK_NULL_HANDLE; // this object will be implicitly destroyed when VkInstance is destroyed
+
+        uint32_t deviceCount = 0;
+        vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr); // query numver of devices
+        if (deviceCount == 0) {
+            throw std::runtime_error("failed to find GPUs with Vulkan support");
+        }
+
+        std::vector<VkPhysicalDevice> devices(deviceCount); // allocate vector with deviceCount size
+        vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data()); // get all devices
+
+        for (const auto& device : devices) {
+            if (isDeviceSuitable(device)) {
+				physicalDevice = device; // if we find a suitable device, break the loop
+				break;
+			}
+        }
+
+        if (physicalDevice == VK_NULL_HANDLE) {
+            throw std::runtime_error("failed to find a suitable GPU");
+        }
+    }
+
     void initVulkan() {
         // init private Vulkan objects here
         createInstance();
         setupDebugMessenger();
+        pickPhysicalDevice();
     }
 
     void mainLoop() {
