@@ -459,7 +459,7 @@ private:
             createInfo.pQueueFamilyIndices = nullptr; // Optional
         }
 
-        createInfo.preTransform = swapChainSupport.capabilities.currentTransform; // specify transform to perform on swap chain images
+        createInfo.preTransform = swapChainSupport.capabilities.currentTransform; //relative to the presentation engine¡¯s natural orientation
         createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR; // ignore alpha channel
         createInfo.presentMode = presentMode; // itself
         createInfo.clipped = VK_TRUE; // ignore obscured pixels
@@ -468,7 +468,46 @@ private:
         if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain) != VK_SUCCESS) {
             throw std::runtime_error("failed to create swap chain!");
         }
+
+        // retrieving the handles of the VkImages
+        
+        vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr); // get number of images
+        swapChainImages.resize(imageCount); // resize vector to fit all images
+        vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data()); // get all images
+
+        swapChainImageFormat = surfaceFormat.format;
+        swapChainExtent = extent;
     }
+
+    //----------------------------Image view---------------------------------
+    void createImageViews() {
+        for (size_t i = 0; i < swapChainImages.size(); i++) {
+            VkImageViewCreateInfo createInfo{};
+            createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            createInfo.image = swapChainImages[i];
+            createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D; // enables us to treat images as 1D, 2D, 3D textures, cube maps, etc.
+            createInfo.format = swapChainImageFormat;
+            // default channel mapping
+            createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            createInfo.subresourceRange.baseMipLevel = 0;
+            createInfo.subresourceRange.levelCount = 1;
+            createInfo.subresourceRange.baseArrayLayer = 0;
+            createInfo.subresourceRange.layerCount = 1;
+
+            if (vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create image views!");
+            }
+        }
+    }
+
+    //----------------------------Graphics Pipeline---------------------------------
+    void createGraphicsPipeline() {
+
+	}
 
 
     //----------------------------Initialize & main loop---------------------------------
@@ -492,6 +531,9 @@ private:
     }
 
     void cleanup() {
+        for (auto imageView : swapChainImageViews) {
+            vkDestroyImageView(device, imageView, nullptr);
+        }
         vkDestroySwapchainKHR(device, swapChain, nullptr);
         if (enableValidationLayers) {
             DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
@@ -514,7 +556,11 @@ private:
     VkDevice device; // logical device
     VkQueue graphicsQueue; // a handle to the graphics queue, implicitly destroyed when logical device is destroyed
     VkQueue presentQueue; // a handle to the presentation queue
-    VkSwapchainKHR swapChain;
+    VkSwapchainKHR swapChain; 
+    std::vector<VkImage> swapChainImages;
+    VkFormat swapChainImageFormat;
+    VkExtent2D swapChainExtent;
+    std::vector<VkImageView> swapChainImageViews; // image views are created and destroyed with the swap chain
 };
 
 int main() {
