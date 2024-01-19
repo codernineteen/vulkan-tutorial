@@ -121,14 +121,57 @@ struct Vertex {
 };
 
 const std::vector<Vertex> vertices = {
-    {{0.0f, -0.5f}, {1.0f,0.0f,0.0f}},
-    {{0.5f, 0.5f}, {0.0f,1.0f,0.0f}},
-    {{-0.5f, 0.5f}, {1.0f,0.0f,1.0f}},
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+};
+
+const std::vector<uint16_t> indices = {
+    0, 1, 2, 2, 3, 0
 };
 
 
-
 class HelloTriangleApplication {
+private:
+    GLFWwindow* window;
+
+    VkInstance instance;
+    VkDebugUtilsMessengerEXT debugMessenger; // callback is a part of debug messenger
+    VkSurfaceKHR surface;
+
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE; // handle to physical device
+    VkDevice device; // logical device
+
+    VkQueue graphicsQueue; // a handle to the graphics queue, implicitly destroyed when logical device is destroyed
+    VkQueue presentQueue; // a handle to the presentation queue
+
+    VkSwapchainKHR swapChain;
+    std::vector<VkImage> swapChainImages;
+    VkFormat swapChainImageFormat;
+    VkExtent2D swapChainExtent;
+    std::vector<VkImageView> swapChainImageViews; // image views are created and destroyed with the swap chain
+    std::vector<VkFramebuffer> swapChainFramebuffers; // framebuffers are created and destroyed with the swap chain
+
+    VkRenderPass renderPass;
+    VkPipelineLayout pipelineLayout; // pipeline layout
+    VkPipeline graphicsPipeline;
+
+    VkCommandPool commandPool; // command pool
+    VkCommandPool transferCommandPool;
+    std::vector<VkCommandBuffer> commandBuffers; // command buffer
+    VkBuffer vertexBuffer; // vertex buffer
+    VkDeviceMemory vertexBufferMemory; // vertex buffer memory
+    VkBuffer indexBuffer; // index buffer
+    VkDeviceMemory indexBufferMemory; // index buffer memory
+
+    std::vector<VkSemaphore> imageAvailableSemaphores;
+    std::vector<VkSemaphore> renderFinishedSemaphores;
+    std::vector<VkFence> inFlightFences;
+
+    bool framebufferResized = false;
+
+    uint32_t currentFrame = 0;
 public:
     void run() {
         initWindow(); // init glfw window
@@ -901,8 +944,9 @@ private:
         VkBuffer vertexBuffers[] = { vertexBuffer };
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+        vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-        vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
         // command for end render pass
         vkCmdEndRenderPass(commandBuffer);
@@ -1026,6 +1070,26 @@ private:
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
 
+    void createIndexBuffer() {
+        VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+        void* data;
+        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        memcpy(data, indices.data(), (size_t)bufferSize);
+        vkUnmapMemory(device, stagingBufferMemory);
+
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
+
+        copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingBufferMemory, nullptr);
+    }
+
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1078,6 +1142,7 @@ private:
         createFrameBuffers();
         createCommandPool(); // create command pool after creating frame buffers
         createTransferCommandPool();
+        createIndexBuffer();
         createVertexBuffer();
         createCommandBuffers();
         createSyncObjects();
@@ -1171,6 +1236,9 @@ private:
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
         vkDestroyRenderPass(device, renderPass, nullptr);
 
+        vkDestroyBuffer(device, indexBuffer, nullptr);
+        vkFreeMemory(device, indexBufferMemory, nullptr);
+
         vkDestroyBuffer(device, vertexBuffer, nullptr);
         vkFreeMemory(device, vertexBufferMemory, nullptr);
 
@@ -1197,44 +1265,6 @@ private:
 
         glfwTerminate();
     }
-
-private:
-    GLFWwindow* window;
-
-    VkInstance instance;
-    VkDebugUtilsMessengerEXT debugMessenger; // callback is a part of debug messenger
-    VkSurfaceKHR surface;
-
-    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE; // handle to physical device
-    VkDevice device; // logical device
-
-    VkQueue graphicsQueue; // a handle to the graphics queue, implicitly destroyed when logical device is destroyed
-    VkQueue presentQueue; // a handle to the presentation queue
-
-    VkSwapchainKHR swapChain; 
-    std::vector<VkImage> swapChainImages;
-    VkFormat swapChainImageFormat;
-    VkExtent2D swapChainExtent;
-    std::vector<VkImageView> swapChainImageViews; // image views are created and destroyed with the swap chain
-    std::vector<VkFramebuffer> swapChainFramebuffers; // framebuffers are created and destroyed with the swap chain
-
-    VkRenderPass renderPass;
-    VkPipelineLayout pipelineLayout; // pipeline layout
-    VkPipeline graphicsPipeline;
-    
-    VkCommandPool commandPool; // command pool
-    VkCommandPool transferCommandPool;
-    std::vector<VkCommandBuffer> commandBuffers; // command buffer
-    VkBuffer vertexBuffer; // vertex buffer
-    VkDeviceMemory vertexBufferMemory; // vertex buffer memory
-    
-    std::vector<VkSemaphore> imageAvailableSemaphores;
-    std::vector<VkSemaphore> renderFinishedSemaphores;
-    std::vector<VkFence> inFlightFences;
-
-    bool framebufferResized = false;
-
-    uint32_t currentFrame = 0;
 };
 
 int main() {
